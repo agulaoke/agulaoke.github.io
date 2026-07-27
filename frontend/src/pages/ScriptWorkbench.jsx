@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { Plus, Edit3, Trash2, Clock, Play, CheckCircle2, FileText, AlertCircle } from 'lucide-react'
+import { Plus, Edit3, Trash2, Clock, Play, CheckCircle2, FileText, AlertCircle, Maximize2, Minimize2, ChevronLeft } from 'lucide-react'
 
 const TEMPLATE_SECTIONS = [
   { key: 'hook', label: '黄金3秒钩子', hint: '反常识/冲突/悬念/共鸣，15字以内', max: 20, color: '#fbbf24' },
@@ -15,6 +15,7 @@ export default function ScriptWorkbench() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [filter, setFilter] = useState('')
+  const [fullscreenEditor, setFullscreenEditor] = useState(false)
 
   const [form, setForm] = useState({
     title: '', hook: '', pain_point: '', concept_bridge: '',
@@ -215,10 +216,24 @@ export default function ScriptWorkbench() {
               ))}
 
               <div>
-                <label style={{ fontSize: 12, color: '#a0a0a0', marginBottom: 4, display: 'block' }}>完整文案（可选）</label>
-                <textarea className="input" value={form.full_text}
+                <label style={{ fontSize: 12, color: '#a0a0a0', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>完整文案</span>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ fontSize: 11, padding: '2px 8px', gap: 4 }}
+                    onClick={() => setFullscreenEditor(true)}
+                  >
+                    <Maximize2 size={13} /> 全屏编辑
+                  </button>
+                </label>
+                <textarea
+                  className="input"
+                  value={form.full_text}
                   onChange={(e) => setForm({ ...form, full_text: e.target.value })}
-                  placeholder="或在这里直接写完整文案..." rows={4} />
+                  placeholder="在这里直接写或粘贴完整口播文案..."
+                  rows={6}
+                  style={{ minHeight: 120, fontSize: 14, lineHeight: 1.8, fontFamily: 'inherit' }}
+                />
               </div>
 
               {isOverLimit && (
@@ -237,6 +252,99 @@ export default function ScriptWorkbench() {
                 {editing ? '保存修改' : '创建脚本'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 全屏文案编辑器 */}
+      {fullscreenEditor && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 300,
+          background: 'var(--bg-primary)',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* 顶部工具栏 */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--bg-primary)',
+          }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setFullscreenEditor(false)}
+              style={{ gap: 4 }}
+            >
+              <ChevronLeft size={18} /> 返回
+            </button>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {form.full_text.length} 字 · 约 {Math.ceil(form.full_text.length / 4.5)} 秒
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setFullscreenEditor(false)}
+            >
+              完成
+            </button>
+          </div>
+
+          {/* 全屏文本框 */}
+          <textarea
+            value={form.full_text}
+            onChange={(e) => setForm({ ...form, full_text: e.target.value })}
+            placeholder="在这里写完整口播文案...&#10;&#10;支持分段、空行、任意长度。&#10;写完后点右上角「完成」回到表单。"
+            autoFocus
+            style={{
+              flex: 1,
+              width: '100%',
+              background: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              border: 'none',
+              padding: '16px',
+              fontSize: 15,
+              lineHeight: 1.9,
+              fontFamily: 'inherit',
+              resize: 'none',
+              outline: 'none',
+              WebkitAppearance: 'none',
+            }}
+          />
+
+          {/* 底部快捷工具栏 */}
+          <div style={{
+            display: 'flex', gap: 8, padding: '10px 16px',
+            borderTop: '1px solid var(--border)',
+            background: 'var(--bg-secondary)',
+            overflowX: 'auto',
+          }}>
+            {[
+              { label: '【钩子】', insert: '\n【0-10秒｜黄金钩子】\n' },
+              { label: '【痛点】', insert: '\n【10-25秒｜痛点场景】\n' },
+              { label: '【故事】', insert: '\n【25-70秒｜故事展开】\n' },
+              { label: '【观点】', insert: '\n【70-100秒｜概念嫁接】\n' },
+              { label: '【收尾】', insert: '\n【100-120秒｜收尾互动】\n' },
+            ].map((item) => (
+              <button
+                key={item.label}
+                className="btn btn-sm btn-secondary"
+                style={{ whiteSpace: 'nowrap', fontSize: 11, flexShrink: 0 }}
+                onClick={() => {
+                  const ta = document.querySelector('textarea[placeholder*="在这里写完整口播文案"]')
+                  if (ta) {
+                    const start = ta.selectionStart
+                    const end = ta.selectionEnd
+                    const newText = form.full_text.slice(0, start) + item.insert + form.full_text.slice(end)
+                    setForm({ ...form, full_text: newText })
+                    setTimeout(() => {
+                      ta.focus()
+                      ta.setSelectionRange(start + item.insert.length, start + item.insert.length)
+                    }, 50)
+                  }
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
       )}
