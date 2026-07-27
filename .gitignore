@@ -1,0 +1,6 @@
+node_modules/
+backend/venv/
+frontend/dist/
+data/
+/tmp/
+*.log
