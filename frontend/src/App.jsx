@@ -8,9 +8,10 @@ import Inspirations from './pages/Inspirations'
 import Hotspots from './pages/Hotspots'
 import ScriptWorkbench from './pages/ScriptWorkbench'
 import DataCenter from './pages/DataCenter'
+import TokenSetup from './components/TokenSetup'
 
 export default function App() {
-  const { loadAll } = useStore()
+  const { loadAll, tokenReady } = useStore()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -27,6 +28,10 @@ export default function App() {
         </div>
       </div>
     )
+  }
+
+  if (!tokenReady) {
+    return <TokenSetup />
   }
 
   return (

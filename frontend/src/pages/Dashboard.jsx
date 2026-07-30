@@ -1,10 +1,10 @@
 import { useStore } from '../store'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Lightbulb, TrendingUp, Video, Users, Eye, Heart, Play } from 'lucide-react'
+import { FileText, Lightbulb, TrendingUp, Video, Users, Eye, Heart, Play, Cloud, RefreshCw } from 'lucide-react'
 
 export default function Dashboard() {
-  const { dashboard, loadAll, refreshHotspots } = useStore()
+  const { dashboard, loadAll, refreshHotspots, syncToCloud, pullFromCloud, syncing } = useStore()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -31,13 +31,24 @@ export default function Dashboard() {
           <div className="page-title">阿骨唠嗑</div>
           <div className="page-subtitle">内容创作工作台 · {new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
         </div>
-        <div style={{
-          width: 40, height: 40, borderRadius: 20,
-          background: 'linear-gradient(135deg, #a78bfa, #818cf8)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, fontWeight: 700
-        }}>
-          阿
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={pullFromCloud}
+            disabled={syncing}
+            title="从云端拉取最新"
+            style={{ padding: '6px', gap: 2 }}
+          >
+            <RefreshCw size={16} style={syncing ? { animation: 'spin 1s linear infinite' } : {}} />
+          </button>
+          <div style={{
+            width: 40, height: 40, borderRadius: 20,
+            background: 'linear-gradient(135deg, #a78bfa, #818cf8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18, fontWeight: 700
+          }}>
+            阿
+          </div>
         </div>
       </div>
 
