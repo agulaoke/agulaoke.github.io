@@ -1,4 +1,4 @@
-const CACHE_NAME = 'agu-toolkit-v1'
+const CACHE_NAME = 'agu-toolkit-v2'
 const urlsToCache = ['/', '/index.html', '/manifest.json']
 
 self.addEventListener('install', (event) => {
@@ -7,12 +7,13 @@ self.addEventListener('install', (event) => {
       return cache.addAll(urlsToCache)
     })
   )
+  self.skipWaiting()
 })
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request)
+    fetch(event.request).catch(() => {
+      return caches.match(event.request)
     })
   )
 })
@@ -25,4 +26,5 @@ self.addEventListener('activate', (event) => {
       )
     })
   )
+  self.clients.claim()
 })
