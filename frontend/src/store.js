@@ -15,8 +15,21 @@ function getToken() {
   return null
 }
 
-function setToken(token) {
-  localStorage.setItem('gh_token', token)
+// 安全的UTF-8 base64 编码/解码
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str)
+  let binary = ''
+  bytes.forEach(b => binary += String.fromCharCode(b))
+  return btoa(binary)
+}
+
+function base64ToUtf8(base64) {
+  const binary = atob(base64.replace(/\n/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return new TextDecoder().decode(bytes)
 }
 
 // GitHub API 读写
@@ -30,7 +43,7 @@ async function githubRead() {
     })
     if (!res.ok) return null
     const data = await res.json()
-    const content = atob(data.content.replace(/\n/g, ''))
+    const content = base64ToUtf8(data.content)
     const json = JSON.parse(content)
     json._sha = data.sha
     return json
@@ -45,7 +58,7 @@ async function githubWrite(data) {
   if (!token) throw new Error('未设置GitHub Token')
   try {
     const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${DATA_FILE}`
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))))
+    const content = utf8ToBase64(JSON.stringify(data, null, 2))
     const body = {
       message: `更新数据 ${new Date().toISOString()}`,
       content,
