@@ -38,9 +38,13 @@ async function githubRead() {
   if (!token) return null
   try {
     const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${DATA_FILE}?ref=${GITHUB_BRANCH}`
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
     const res = await fetch(url, {
-      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' },
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     if (!res.ok) return null
     const data = await res.json()
     const content = base64ToUtf8(data.content)
@@ -65,11 +69,15 @@ async function githubWrite(data) {
       branch: GITHUB_BRANCH,
     }
     if (data._sha) body.sha = data._sha
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
     const res = await fetch(url, {
       method: 'PUT',
       headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     if (!res.ok) {
       const err = await res.json()
       throw new Error(err.message || '写入失败')

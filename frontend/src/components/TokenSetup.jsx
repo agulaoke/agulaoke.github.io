@@ -12,9 +12,10 @@ export default function TokenSetup() {
     if (!token.trim() || token.trim().length < 20) return
     setLoading(true)
     setGitHubToken(token.trim())
-    await loadAll()
-    setLoading(false)
-    window.location.reload()
+    // 不等待loadAll，直接刷新让App初始化
+    setTimeout(() => {
+      window.location.reload()
+    }, 300)
   }
 
   return (
