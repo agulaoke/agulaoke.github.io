@@ -1,105 +1,15 @@
 import { create } from 'zustand'
 
-// GitHub 配置
-const GITHUB_TOKEN = 'ghp_your_token_here' // 会在构建时注入
-const GITHUB_OWNER = 'agulaoke'
-const GITHUB_REPO = 'agu-data'
-const GITHUB_BRANCH = 'main'
-const DATA_FILE = 'data.json'
+// ====== 纯本地存储，不依赖任何外部API ======
 
-// 从构建时注入的环境变量获取token，或从URL参数获取
-function getToken() {
-  // 尝试从localStorage获取（用户首次输入后缓存）
-  const cached = localStorage.getItem('gh_token')
-  if (cached && cached.length > 10) return cached
-  return null
-}
-
-// 安全的UTF-8 base64 编码/解码
-function utf8ToBase64(str) {
-  const bytes = new TextEncoder().encode(str)
-  let binary = ''
-  bytes.forEach(b => binary += String.fromCharCode(b))
-  return btoa(binary)
-}
-
-function base64ToUtf8(base64) {
-  const binary = atob(base64.replace(/\n/g, ''))
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return new TextDecoder().decode(bytes)
-}
-
-// GitHub API 读写
-async function githubRead() {
-  const token = getToken()
-  if (!token) return null
-  try {
-    const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${DATA_FILE}?ref=${GITHUB_BRANCH}`
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    const res = await fetch(url, {
-      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' },
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (!res.ok) return null
-    const data = await res.json()
-    const content = base64ToUtf8(data.content)
-    const json = JSON.parse(content)
-    json._sha = data.sha
-    return json
-  } catch (e) {
-    console.error('GitHub读取失败:', e)
-    return null
-  }
-}
-
-async function githubWrite(data) {
-  const token = getToken()
-  if (!token) throw new Error('未设置GitHub Token')
-  try {
-    const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${DATA_FILE}`
-    const content = utf8ToBase64(JSON.stringify(data, null, 2))
-    const body = {
-      message: `更新数据 ${new Date().toISOString()}`,
-      content,
-      branch: GITHUB_BRANCH,
-    }
-    if (data._sha) body.sha = data._sha
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10000)
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.message || '写入失败')
-    }
-    const result = await res.json()
-    data._sha = result.content.sha
-    return data
-  } catch (e) {
-    console.error('GitHub写入失败:', e)
-    throw e
-  }
-}
-
-// 本地缓存（离线时用）
-const CACHE_KEY = 'agu-cache-v2'
+const CACHE_KEY = 'agu-data'
 
 function loadCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) return JSON.parse(raw)
   } catch (e) {}
-  return { topics: [], inspirations: [], scripts: [], videos: [], _sha: null }
+  return null
 }
 
 function saveCache(data) {
@@ -108,7 +18,7 @@ function saveCache(data) {
   } catch (e) {}
 }
 
-// 示例数据（首次使用）
+// 首次使用的示例数据
 const SAMPLE_DATA = {
   topics: [
     { id: 'tp001', title: "卸妆比化妆更重要——人生也需要'卸妆'", source_domain: '护肤/化妆', target_audience: '女性', difficulty: 'medium', status: 'pending', tags: ['女性成长', '认知', '情感'], notes: '用女生日常的卸妆动作，隐喻人生需要定期清理情绪和关系', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -171,128 +81,36 @@ export const useStore = create((set, get) => ({
   dashboard: null,
   toast: null,
   initialized: false,
-  syncing: false,
-  tokenReady: !!getToken(),
 
   showToast: (msg) => {
     set({ toast: msg })
     setTimeout(() => set({ toast: null }), 2500)
   },
 
-  setGitHubToken: (token) => {
-    setToken(token)
-    set({ tokenReady: true })
-    get().showToast('Token已保存 ✅')
-  },
-
-  // 加载所有数据：优先从GitHub读，失败则用本地缓存
-  loadAll: async () => {
+  // 加载数据：从localStorage读取，首次用示例数据
+  loadAll: () => {
     const s = get()
     if (s.initialized) return
-
-    // 先加载本地缓存（快速展示）
     const cache = loadCache()
-    if (cache.topics && cache.topics.length > 0) {
+    if (cache && cache.topics && cache.topics.length > 0) {
       set({
         topics: cache.topics || [],
         inspirations: cache.inspirations || [],
         scripts: cache.scripts || [],
         videos: cache.videos || [],
+        initialized: true,
       })
-    }
-
-    // 尝试从GitHub同步
-    if (getToken()) {
-      set({ syncing: true })
-      const cloudData = await githubRead()
-      set({ syncing: false })
-      if (cloudData) {
-        const data = {
-          topics: cloudData.topics || [],
-          inspirations: cloudData.inspirations || [],
-          scripts: cloudData.scripts || [],
-          videos: cloudData.videos || [],
-          _sha: cloudData._sha,
-        }
-        saveCache(data)
-        set({ ...data, initialized: true })
-        get().updateDashboard()
-        return
-      }
-    }
-
-    // 没有token或GitHub读取失败：用本地缓存或示例数据
-    if (!cache.topics || cache.topics.length === 0) {
+    } else {
       saveCache(SAMPLE_DATA)
       set({ ...SAMPLE_DATA, initialized: true })
-    } else {
-      set({ ...cache, initialized: true })
     }
     get().updateDashboard()
   },
 
-  // 同步到GitHub
-  syncToCloud: async () => {
-    if (!getToken()) {
-      get().showToast('请先设置GitHub Token')
-      return false
-    }
-    set({ syncing: true })
-    try {
-      const { topics, inspirations, scripts, videos, _sha } = get()
-      const data = { topics, inspirations, scripts, videos, _sha, updated_at: new Date().toISOString() }
-      const result = await githubWrite(data)
-      saveCache(result)
-      set({ _sha: result._sha, syncing: false })
-      get().showToast('已同步到云端 ☁️')
-      return true
-    } catch (e) {
-      set({ syncing: false })
-      get().showToast(`同步失败: ${e.message}`)
-      return false
-    }
-  },
-
-  // 从云端拉取最新
-  pullFromCloud: async () => {
-    if (!getToken()) {
-      get().showToast('请先设置GitHub Token')
-      return
-    }
-    set({ syncing: true })
-    const cloudData = await githubRead()
-    set({ syncing: false })
-    if (cloudData) {
-      const data = {
-        topics: cloudData.topics || [],
-        inspirations: cloudData.inspirations || [],
-        scripts: cloudData.scripts || [],
-        videos: cloudData.videos || [],
-        _sha: cloudData._sha,
-      }
-      saveCache(data)
-      set({ ...data })
-      get().updateDashboard()
-      get().showToast('已拉取最新数据 ☁️')
-    } else {
-      get().showToast('拉取失败')
-    }
-  },
-
-  // 本地保存 + 自动同步
-  _save: async () => {
-    const { topics, inspirations, scripts, videos, _sha } = get()
-    const data = { topics, inspirations, scripts, videos, _sha, updated_at: new Date().toISOString() }
-    saveCache(data)
+  _save: () => {
+    const { topics, inspirations, scripts, videos } = get()
+    saveCache({ topics, inspirations, scripts, videos })
     get().updateDashboard()
-    // 如果有token，延迟自动同步
-    if (getToken()) {
-      // 防抖：2秒内的多次操作只同步一次
-      if (window._syncTimer) clearTimeout(window._syncTimer)
-      window._syncTimer = setTimeout(() => {
-        get().syncToCloud()
-      }, 2000)
-    }
   },
 
   updateDashboard: () => {
@@ -310,14 +128,14 @@ export const useStore = create((set, get) => ({
   },
 
   // === 选题 ===
-  addTopic: async (data) => {
+  addTopic: (data) => {
     const topic = { id: genId('tp'), ...data, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     set((s) => ({ topics: [topic, ...s.topics] }))
     get().showToast('选题已添加 ✅')
     get()._save()
   },
 
-  updateTopic: async (id, data) => {
+  updateTopic: (id, data) => {
     const existing = get().topics.find(t => t.id === id)
     if (!existing) return
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
@@ -326,21 +144,21 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  deleteTopic: async (id) => {
+  deleteTopic: (id) => {
     set((s) => ({ topics: s.topics.filter(t => t.id !== id) }))
     get().showToast('已删除')
     get()._save()
   },
 
   // === 灵感 ===
-  addInspiration: async (data) => {
+  addInspiration: (data) => {
     const item = { id: genId('in'), ...data, status: data.status || 'raw', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     set((s) => ({ inspirations: [item, ...s.inspirations] }))
     get().showToast('灵感已保存 ✨')
     get()._save()
   },
 
-  updateInspiration: async (id, data) => {
+  updateInspiration: (id, data) => {
     const existing = get().inspirations.find(i => i.id === id)
     if (!existing) return
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
@@ -349,13 +167,13 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  deleteInspiration: async (id) => {
+  deleteInspiration: (id) => {
     set((s) => ({ inspirations: s.inspirations.filter(i => i.id !== id) }))
     get().showToast('已删除')
     get()._save()
   },
 
-  promoteInspiration: async (id) => {
+  promoteInspiration: (id) => {
     const insp = get().inspirations.find(i => i.id === id)
     if (!insp) return
     const topic = { id: genId('tp'), title: insp.content.slice(0, 80), source_domain: '', target_audience: '女性', difficulty: 'medium', status: 'pending', tags: insp.tags || [], notes: `来自灵感: ${insp.notes || ''}`, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
@@ -365,7 +183,7 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  extractLink: async (url) => {
+  extractLink: (url) => {
     const source_type = url.includes('douyin.com') ? 'douyin' : url.includes('xiaohongshu.com') ? 'xiaohongshu' : 'web'
     const source_name = source_type === 'douyin' ? '抖音' : source_type === 'xiaohongshu' ? '小红书' : '网页'
     const item = { id: genId('in'), content: `[${source_name}] ${url}`, source_type, source_url: url, tags: [], notes: '请手动补充内容摘要', status: 'raw', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
@@ -374,8 +192,8 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  // 热点（预设数据）
-  refreshHotspots: async () => {
+  // 热点
+  refreshHotspots: () => {
     const now = new Date().toISOString()
     const fallback = [
       { id: 'hs001', title: '#成年人的顶级自律', source: 'douyin', heat: 95, category: '认知', match_score: 3, created_at: now },
@@ -383,25 +201,20 @@ export const useStore = create((set, get) => ({
       { id: 'hs003', title: '#情绪价值有多重要', source: 'douyin', heat: 88, category: '情感', match_score: 3, created_at: now },
       { id: 'hs004', title: '#读书改变认知', source: 'douyin', heat: 85, category: '认知', match_score: 3, created_at: now },
       { id: 'hs005', title: '#停止精神内耗', source: 'douyin', heat: 82, category: '认知', match_score: 3, created_at: now },
-      { id: 'hs006', title: '#GirlsTalk', source: 'xiaohongshu', heat: 95, category: '女性成长', match_score: 3, created_at: now },
-      { id: 'hs007', title: '#女性觉醒', source: 'xiaohongshu', heat: 92, category: '女性成长', match_score: 3, created_at: now },
-      { id: 'hs008', title: '#情绪管理', source: 'xiaohongshu', heat: 88, category: '认知', match_score: 3, created_at: now },
-      { id: 'hs009', title: '#职场女性', source: 'xiaohongshu', heat: 85, category: '职场', match_score: 3, created_at: now },
-      { id: 'hs010', title: '#认知提升', source: 'xiaohongshu', heat: 83, category: '认知', match_score: 3, created_at: now },
     ]
     set({ hotspots: fallback })
     get().showToast(`热点已刷新 🔥 (${fallback.length}条)`)
   },
 
   // === 脚本 ===
-  addScript: async (data) => {
+  addScript: (data) => {
     const script = { id: genId('sc'), ...data, status: data.status || 'draft', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     set((s) => ({ scripts: [script, ...s.scripts] }))
     get().showToast('脚本已保存 📝')
     get()._save()
   },
 
-  updateScript: async (id, data) => {
+  updateScript: (id, data) => {
     const existing = get().scripts.find(s => s.id === id)
     if (!existing) return
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
@@ -410,21 +223,21 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  deleteScript: async (id) => {
+  deleteScript: (id) => {
     set((s) => ({ scripts: s.scripts.filter(sc => sc.id !== id) }))
     get().showToast('已删除')
     get()._save()
   },
 
   // === 视频数据 ===
-  addVideo: async (data) => {
+  addVideo: (data) => {
     const video = { id: genId('vd'), ...data, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     set((s) => ({ videos: [video, ...s.videos] }))
     get().showToast('数据已记录 📊')
     get()._save()
   },
 
-  updateVideo: async (id, data) => {
+  updateVideo: (id, data) => {
     const existing = get().videos.find(v => v.id === id)
     if (!existing) return
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
@@ -433,7 +246,7 @@ export const useStore = create((set, get) => ({
     get()._save()
   },
 
-  deleteVideo: async (id) => {
+  deleteVideo: (id) => {
     set((s) => ({ videos: s.videos.filter(v => v.id !== id) }))
     get().showToast('已删除')
     get()._save()

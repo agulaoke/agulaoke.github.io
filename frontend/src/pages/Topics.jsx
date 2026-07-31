@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { Plus, Edit3, Trash2, Search, Filter, Play, CheckCircle2, Clock, XCircle, RefreshCw, Cloud } from 'lucide-react'
+import { Plus, Edit3, Trash2, Search, Filter, Play, CheckCircle2, Clock, XCircle } from 'lucide-react'
 
 const STATUS_MAP = {
   pending: { label: '待做', color: '#fbbf24', icon: Clock },
@@ -16,7 +16,7 @@ const DIFFICULTY_MAP = {
 }
 
 export default function Topics() {
-  const { topics, addTopic, updateTopic, deleteTopic, syncToCloud, pullFromCloud, syncing } = useStore()
+  const { topics, addTopic, updateTopic, deleteTopic } = useStore()
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [filter, setFilter] = useState('')
@@ -79,17 +79,9 @@ export default function Topics() {
           <div className="page-title">选题库</div>
           <div className="page-subtitle">{topics.length} 个选题</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-sm btn-ghost" onClick={pullFromCloud} disabled={syncing} title="从云端拉取">
-            <RefreshCw size={16} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          </button>
-          <button className="btn btn-sm btn-ghost" onClick={syncToCloud} disabled={syncing} title="同步到云端">
-            <Cloud size={16} />
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={openNew}>
+        <button className="btn btn-primary btn-sm" onClick={openNew}>
             <Plus size={16} /> 新建
-          </button>
-        </div>
+        </button>
       </div>
 
       <div style={{ padding: '0 16px' }}>
